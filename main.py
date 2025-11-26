@@ -1,81 +1,71 @@
-from flask import Flask, render_template, request, jsonify
 import requests
+from flask import Flask, render_template, request, redirect, url_for
+from datetime import datetime
 
 app = Flask(__name__)
 
-# --- CONFIGURATION ---
-# False = Try to fetch real data from TikWM
-# True = Use fake data (useful if the API is down or blocking us)
-USE_MOCK = False 
+# Reddit requires a unique User-Agent or it will block requests
+HEADERS = {'User-Agent': 'MyAnimeList-Reddit-Clone/1.0'}
+
+def format_timestamp(created_utc):
+    return datetime.fromtimestamp(created_utc).strftime('%b %d, %Y')
+
+app.jinja_env.filters['date'] = format_timestamp
+
+def get_reddit_data(url):
+    try:
+        resp = requests.get(url, headers=HEADERS)
+        if resp.status_code != 200:
+            return None
+        return resp.json()
+    except:
+        return None
 
 @app.route('/')
 def home():
-    return render_template('index.html')
+    # Defaults to r/all or user selected subreddit
+    subreddit = request.args.get('r', 'all')
+    sort = request.args.get('sort', 'hot')
+    
+    url = f"https://www.reddit.com/r/{subreddit}/{sort}.json?limit=25"
+    data = get_reddit_data(url)
+    
+    posts = []
+    if data:
+        for child in data['data']['children']:
+            posts.append(child['data'])
+            
+    return render_template('index.html', posts=posts, subreddit=subreddit, sort=sort)
 
 @app.route('/search')
-def search_proxy():
+def search():
     query = request.args.get('q')
     if not query:
-        return jsonify({'error': 'No query provided'}), 400
-
-    if USE_MOCK:
-        return jsonify(get_mock_data(query))
-
-    try:
-        # We request data from TikWM (a public TikTok archiver)
-        # doing this in Python bypasses CORS errors.
-        url = "https://www.tikwm.com/api/feed/search"
-        payload = {
-            "keywords": query,
-            "count": 12,
-            "cursor": 0,
-            "web": 1,
-            "hd": 1
-        }
+        return redirect(url_for('home'))
         
-        # Send POST request
-        resp = requests.post(url, data=payload)
-        data = resp.json()
+    url = f"https://www.reddit.com/search.json?q={query}&limit=25"
+    data = get_reddit_data(url)
+    
+    posts = []
+    if data:
+        for child in data['data']['children']:
+            posts.append(child['data'])
+            
+    return render_template('index.html', posts=posts, subreddit="Search Results", sort="relevance")
 
-        # Parse the specific response structure of TikWM
-        clean_videos = []
-        
-        if data.get('code') == 0 and 'data' in data and 'videos' in data['data']:
-            for v in data['data']['videos']:
-                clean_videos.append({
-                    'id': v.get('video_id'),
-                    'desc': v.get('title', 'No Description'),
-                    'cover': v.get('cover'),
-                    'play': v.get('play'), # The mp4 link
-                    'author': v.get('author', {}).get('nickname', 'Unknown')
-                })
-            return jsonify({'videos': clean_videos})
-        else:
-            return jsonify({'error': 'No results found', 'raw': data})
+@app.route('/comments/<path:permalink>')
+def comments(permalink):
+    # Reddit permalinks usually start with /r/, we need to append .json
+    url = f"https://www.reddit.com/{permalink}.json"
+    data = get_reddit_data(url)
+    
+    if not data:
+        return "Error loading post"
 
-    except Exception as e:
-        print(f"Error: {e}")
-        return jsonify({'error': 'Server error fetching data'}), 500
-
-def get_mock_data(query):
-    """Fallback data to test the UI if API fails"""
-    return {
-        'videos': [
-            {
-                'desc': f'Test Result for {query}',
-                'cover': 'https://placehold.co/300x500/1a1a1a/white?text=Video+1',
-                'play': 'https://www.w3schools.com/html/mov_bbb.mp4',
-                'author': 'DemoUser'
-            },
-            {
-                'desc': 'Another video',
-                'cover': 'https://placehold.co/300x500/2a2a2a/white?text=Video+2',
-                'play': 'https://www.w3schools.com/html/mov_bbb.mp4',
-                'author': 'TestAccount'
-            }
-        ]
-    }
+    post = data[0]['data']['children'][0]['data']
+    comments_raw = data[1]['data']['children']
+    
+    return render_template('comments.html', post=post, comments=comments_raw)
 
 if __name__ == '__main__':
-    # Run on 0.0.0.0 to work on Replit/Codespaces
-    app.run(host='0.0.0.0', port=8080, debug=True)
+    app.run(host='0.0.0.0', port=8080)

@@ -1,185 +1,51 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TikTok Viewer</title>
-    <style>
-        /* DARK MODE STYLING */
-        :root {
-            --bg: #121212;
-            --card: #1f1f1f;
-            --text: #ffffff;
-            --accent: #fe2c55;
-        }
-        body {
-            background: var(--bg);
-            color: var(--text);
-            font-family: sans-serif;
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-height: 100vh;
-        }
+{% extends "layout.html" %}
 
-        /* SEARCH BAR */
-        .search-container {
-            position: sticky;
-            top: 0;
-            background: rgba(18,18,18,0.95);
-            width: 100%;
-            padding: 20px;
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-            border-bottom: 1px solid #333;
-            z-index: 10;
-        }
-        input {
-            padding: 12px 20px;
-            border-radius: 50px;
-            border: none;
-            background: #2f2f2f;
-            color: white;
-            width: 300px;
-            outline: none;
-        }
-        button {
-            padding: 12px 25px;
-            border-radius: 50px;
-            border: none;
-            background: var(--accent);
-            color: white;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        button:hover { opacity: 0.9; }
-
-        /* GRID */
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 20px;
-            width: 90%;
-            max-width: 1200px;
-            padding: 20px 0;
-        }
-
-        /* CARDS */
-        .card {
-            background: var(--card);
-            border-radius: 10px;
-            overflow: hidden;
-            cursor: pointer;
-            transition: transform 0.2s;
-            position: relative;
-            aspect-ratio: 9/16;
-        }
-        .card:hover { transform: scale(1.03); }
-        .card img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        .info {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            background: linear-gradient(transparent, rgba(0,0,0,0.9));
-            padding: 10px;
-            box-sizing: border-box;
-        }
-        .author { font-weight: bold; font-size: 0.9em; }
-        .desc { font-size: 0.8em; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-        /* VIDEO MODAL (POPUP) */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9);
-            z-index: 100;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-        }
-        .modal.active { display: flex; }
-        video { max-height: 80vh; max-width: 90%; border-radius: 10px; }
-        .close-btn { margin-top: 15px; background: #444; }
-    </style>
-</head>
-<body>
-
-    <div class="search-container">
-        <input type="text" id="query" placeholder="Search TikTok..." onkeypress="if(event.key==='Enter') doSearch()">
-        <button onclick="doSearch()">Search</button>
+{% block content %}
+<h2 class="section-header">
+    {{ subreddit }} Posts
+    <div class="sort-links">
+        <a href="/?r={{subreddit}}&sort=hot">Hot</a> |
+        <a href="/?r={{subreddit}}&sort=new">New</a> |
+        <a href="/?r={{subreddit}}&sort=top">Top</a>
     </div>
+</h2>
 
-    <div class="grid" id="results"></div>
+<table class="post-list">
+    <tr>
+        <th>Rank</th>
+        <th>Image</th>
+        <th style="text-align: left; padding-left: 10px;">Title</th>
+        <th>Score</th>
+    </tr>
 
-    <!-- Video Player Overlay -->
-    <div class="modal" id="videoModal">
-        <video id="player" controls></video>
-        <button class="close-btn" onclick="closeModal()">Close</button>
-    </div>
+    {% for post in posts %}
+    <tr>
+        <td class="rank-col">{{ loop.index }}</td>
+        
+        <!-- Thumbnail Logic -->
+        <td width="70" align="center">
+            {% if post.thumbnail and 'http' in post.thumbnail %}
+                <img src="{{ post.thumbnail }}" style="width: 50px; height: 70px; object-fit: cover; border: 1px solid #ccc;">
+            {% else %}
+                <div style="width: 50px; height: 70px; background: #eee; border: 1px solid #ccc; line-height: 70px; text-align: center; color: #aaa;">TXT</div>
+            {% endif %}
+        </td>
 
-    <script>
-        async function doSearch() {
-            const query = document.getElementById('query').value;
-            const grid = document.getElementById('results');
-            
-            if(!query) return;
-            
-            grid.innerHTML = '<p style="color:#888; width:100%; text-align:center;">Searching...</p>';
+        <td>
+            <div class="post-title">
+                <a href="/comments/{{ post.permalink.lstrip('/') }}">{{ post.title }}</a>
+            </div>
+            <div class="post-meta">
+                {{ post.subreddit_name_prefixed }} • Posted by u/{{ post.author }} • {{ post.created_utc | date }}
+                <br>
+                <span class="tag">{{ post.num_comments }} comments</span>
+                {% if post.is_video %}<span class="tag" style="background:#ffd6d6;">Video</span>{% endif %}
+            </div>
+        </td>
 
-            try {
-                // We talk to OUR OWN backend, not TikTok directly
-                const response = await fetch(`/search?q=${encodeURIComponent(query)}`);
-                const data = await response.json();
+        <td class="score-col">{{ post.score }}</td>
+    </tr>
+    {% endfor %}
 
-                grid.innerHTML = '';
-
-                if(data.videos) {
-                    data.videos.forEach(v => {
-                        const el = document.createElement('div');
-                        el.className = 'card';
-                        el.onclick = () => openVideo(v.play);
-                        el.innerHTML = `
-                            <img src="${v.cover}">
-                            <div class="info">
-                                <div class="author">@${v.author}</div>
-                                <div class="desc">${v.desc}</div>
-                            </div>
-                        `;
-                        grid.appendChild(el);
-                    });
-                } else {
-                    grid.innerHTML = '<p>No results found.</p>';
-                }
-
-            } catch (e) {
-                console.error(e);
-                grid.innerHTML = '<p style="color:red">Error connecting to server.</p>';
-            }
-        }
-
-        function openVideo(url) {
-            const modal = document.getElementById('videoModal');
-            const player = document.getElementById('player');
-            player.src = url;
-            modal.classList.add('active');
-            player.play();
-        }
-
-        function closeModal() {
-            const modal = document.getElementById('videoModal');
-            const player = document.getElementById('player');
-            player.pause();
-            player.src = '';
-            modal.classList.remove('active');
-        }
-    </script>
-</body>
-</html>
+</table>
+{% endblock %}

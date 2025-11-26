@@ -1,0 +1,59 @@
+{% extends "layout.html" %}
+
+{% block content %}
+
+<!-- Breadcrumb style nav -->
+<div style="border-bottom: 1px solid #bebebe; margin-bottom: 15px; padding-bottom: 5px;">
+    <a href="/">Home</a> &gt; <a href="/?r={{ post.subreddit }}">{{ post.subreddit_name_prefixed }}</a>
+</div>
+
+<h2 style="margin: 0; font-size: 16px;">{{ post.title }}</h2>
+<div class="post-meta" style="margin-bottom: 15px;">
+    By <a href="#">{{ post.author }}</a> | {{ post.created_utc | date }}
+</div>
+
+<!-- Media Display Logic -->
+<div style="background: #f8f8f8; padding: 10px; border: 1px solid #e5e5e5; text-align: center; margin-bottom: 20px;">
+    {% if post.is_video and post.media and post.media.reddit_video %}
+        <video controls class="media-embed">
+            <source src="{{ post.media.reddit_video.fallback_url }}" type="video/mp4">
+            Your browser does not support the video tag.
+        </video>
+    {% elif 'preview' in post and post.preview.images %}
+        <!-- High Res Image -->
+        <img src="{{ post.preview.images[0].source.url.replace('&amp;', '&') }}" style="max-width: 100%;">
+    {% elif post.url and 'jpg' in post.url or 'png' in post.url %}
+        <img src="{{ post.url }}" style="max-width: 100%;">
+    {% else %}
+        <!-- Text Content -->
+        <div style="text-align: left; padding: 10px;">
+            {{ post.selftext }}
+        </div>
+        {% if 'http' in post.url and 'reddit' not in post.url %}
+            <div style="margin-top: 10px;">
+                <a href="{{ post.url }}" target="_blank" style="font-weight: bold;">[Link to external content]</a>
+            </div>
+        {% endif %}
+    {% endif %}
+</div>
+
+<!-- Comments Section -->
+<h2 class="section-header">Comments ({{ post.num_comments }})</h2>
+
+<div class="comments-list">
+    {% for comment in comments %}
+        {% if 'body' in comment.data %}
+        <div style="margin-bottom: 15px; border-bottom: 1px dashed #ddd; padding-bottom: 10px;">
+            <div style="font-size: 10px; color: #2e51a2; font-weight: bold;">
+                {{ comment.data.author }} 
+                <span style="color: #999; font-weight: normal;">• {{ comment.data.score }} pts</span>
+            </div>
+            <div style="margin-top: 5px; font-size: 11px; line-height: 1.4;">
+                {{ comment.data.body }}
+            </div>
+        </div>
+        {% endif %}
+    {% endfor %}
+</div>
+
+{% endblock %}
